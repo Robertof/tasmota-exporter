@@ -7,6 +7,11 @@ import (
 	"time"
 )
 
+type MultiDimMetric struct {
+	label string
+	values map[string]float64
+}
+
 type SourceMetrics struct {
 	Metrics      map[string]any
 	lastAccessed time.Time

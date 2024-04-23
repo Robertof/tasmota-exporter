@@ -21,20 +21,46 @@ func (m *Metrics) Refresh() {
 		statusNetHostname, hostnameExists := sourceMetrics.Metrics["status_net_hostname"].(string)
 		statusNetIpAddress, ipAddressExists := sourceMetrics.Metrics["status_net_ip_address"].(string)
 		statusDeviceName, deviceNameExists := sourceMetrics.Metrics["status_device_name"].(string)
+
+		if !topicExists || !hostnameExists || !ipAddressExists || !deviceNameExists {
+			continue
+		}
+
 		for pmk, pmv := range sourceMetrics.Metrics {
-			if float, ok := pmv.(float64); ok && topicExists && hostnameExists && ipAddressExists && deviceNameExists {
-				if _, ok := m.gauges[pmk]; !ok {
-					m.gauges[pmk] = prometheus.NewGaugeVec(
-						prometheus.GaugeOpts{
-							Name:      pmk,
-							Namespace: "tasmota",
-						},
-						[]string{"source", "status_topic", "status_net_hostname", "status_net_ip_address", "status_device_name"},
-					)
-					prometheus.MustRegister(m.gauges[pmk])
-				}
+			if float, ok := pmv.(float64); ok {
+				m.registerGauge(pmk, []string{
+					"source", "status_topic", "status_net_hostname",
+					"status_net_ip_address", "status_device_name",
+				})
 				m.gauges[pmk].WithLabelValues(source, statusTopic, statusNetHostname, statusNetIpAddress, statusDeviceName).Set(float)
+			} else if multi, ok := pmv.(MultiDimMetric); ok {
+				m.registerGauge(pmk, []string{
+					"source", "status_topic", "status_net_hostname",
+					"status_net_ip_address", "status_device_name",
+					multi.label,
+				})
+
+				for labelVal, metricVal := range multi.values {
+					m.gauges[pmk].WithLabelValues(
+						source, statusTopic, statusNetHostname,
+						statusNetIpAddress, statusDeviceName,
+						labelVal,
+					).Set(metricVal)
+				}
 			}
 		}
+	}
+}
+
+func (m *Metrics) registerGauge(pmk string, labelNames []string) {
+	if _, ok := m.gauges[pmk]; !ok {
+		m.gauges[pmk] = prometheus.NewGaugeVec(
+			prometheus.GaugeOpts{
+				Name:      pmk,
+				Namespace: "tasmota",
+			},
+			labelNames,
+		)
+		prometheus.MustRegister(m.gauges[pmk])
 	}
 }
