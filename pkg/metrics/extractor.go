@@ -2,6 +2,9 @@ package metrics
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
+	"math"
 	"regexp"
 	"strings"
 )
@@ -10,17 +13,25 @@ var matchFirstCap = regexp.MustCompile("(.)([A-Z][a-z]+)")
 var matchAllCap = regexp.MustCompile("([a-z0-9])([A-Z])")
 var matchInvalidChar = regexp.MustCompile("[-]")
 
-func Extract(message []byte) map[string]any {
+func Extract(message []byte) (map[string]any, error) {
 	incoming := map[string]any{}
 	normalized := map[string]any{}
 	err := json.Unmarshal(message, &incoming)
-	if err == nil {
-		normalized = normalize(incoming)
+
+	if err != nil {
+		return normalized, fmt.Errorf("received payload with invalid JSON: %w", err)
 	}
-	return normalized
+
+	normalized, err = normalize(incoming)
+
+	if err != nil {
+		return normalized, fmt.Errorf("failed to normalize data: %w", err)
+	}
+
+	return normalized, nil
 }
 
-func normalize(incoming map[string]any) map[string]any {
+func normalize(incoming map[string]any) (map[string]any, error) {
 	normalized := map[string]any{}
 	for k, v := range incoming {
 		if v, ok := v.([]any); k == "TotalTariff" && ok {
@@ -45,17 +56,27 @@ func normalize(incoming map[string]any) map[string]any {
 		case int64:
 			normalized[toSnakeCase(k)] = float64(x)
 		case float64:
+			if k == "Voltage" && math.Floor(x) == 0 {
+				return nil, errors.New("received reading with invalid voltage of 0V")
+			}
+
 			normalized[toSnakeCase(k)] = x
 		case string:
 			normalized[toSnakeCase(k)] = x
 		case map[string]any:
-			converted := normalize(x)
+			converted, err := normalize(x)
+
+			if err != nil {
+				return converted, err
+			}
+
 			for k1, v := range converted {
 				normalized[toSnakeCase(k)+"_"+k1] = v
 			}
 		}
 	}
-	return normalized
+
+	return normalized, nil
 }
 
 func toSnakeCase(camelCase string) string {

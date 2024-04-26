@@ -1,6 +1,8 @@
 package engine
 
 import (
+	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -36,7 +38,17 @@ func (e *Engine) Subscribe(mqttListenTopics []string) error {
 
 func (e *Engine) messageProcessor(_ mqtt.Client, m mqtt.Message) {
 	e.scheduleStatusCommand(m.Topic())
-	rawMetrics := metrics.Extract(m.Payload())
+	rawMetrics, err := metrics.Extract(m.Payload())
+
+	if err != nil {
+		if serr := new(json.SyntaxError); !errors.As(err, &serr) {
+			// don't log syntax errors, as this subscribes to a wide range of topics.
+			slog.Warn("failed to extract metrics",
+				"topic", m.Topic(), "error", err)
+		}
+		return
+	}
+
 	e.plainMetrics.Update(m.Topic(), rawMetrics)
 }
 
