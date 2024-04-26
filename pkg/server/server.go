@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"github.com/dyrkin/tasmota-exporter/pkg/metrics"
@@ -16,6 +17,8 @@ type Server struct {
 }
 
 func NewServer(port int, metrics *metrics.Metrics) *Server {
+	prometheus.MustRegister(metrics)
+
 	mux := http.NewServeMux()
 	httpServer := &http.Server{
 		Addr:    ":" + strconv.Itoa(port),
@@ -27,10 +30,7 @@ func NewServer(port int, metrics *metrics.Metrics) *Server {
 		port:       port,
 	}
 
-	mux.HandleFunc("/metrics", func(writer http.ResponseWriter, request *http.Request) {
-		metrics.Refresh()
-		promhttp.Handler().ServeHTTP(writer, request)
-	})
+	mux.Handle("/metrics", promhttp.Handler())
 
 	return s
 }
