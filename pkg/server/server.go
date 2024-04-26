@@ -17,7 +17,7 @@ type Server struct {
 }
 
 func NewServer(port int, metrics *metrics.Metrics) *Server {
-	prometheus.MustRegister(metrics)
+	prometheus.WrapRegistererWithPrefix("tasmota_", prometheus.DefaultRegisterer).MustRegister(metrics)
 
 	mux := http.NewServeMux()
 	httpServer := &http.Server{
